@@ -1,0 +1,35 @@
+CREATE PROCEDURE ProcessSCD2
+AS
+BEGIN
+    -- Start a transaction
+    BEGIN TRANSACTION;
+
+    -- Step 1: Close out current records with changes
+    UPDATE t
+    SET EndDate = GETDATE(),
+        CurrentFlag = 0
+    FROM TargetTable t
+    INNER JOIN SourceTable s
+    ON t.BusinessKey = s.BusinessKey
+    WHERE t.CurrentFlag = 1
+    AND (
+        t.Attribute1 <> s.Attribute1
+        OR t.Attribute2 <> s.Attribute2
+    );
+
+    -- Step 2: Insert new or changed records
+    INSERT INTO TargetTable (BusinessKey, Attribute1, Attribute2, StartDate, EndDate, CurrentFlag)
+    SELECT s.BusinessKey, s.Attribute1, s.Attribute2, GETDATE(), NULL, 1
+    FROM SourceTable s
+    LEFT JOIN TargetTable t
+    ON s.BusinessKey = t.BusinessKey
+    AND t.CurrentFlag = 1
+    WHERE t.BusinessKey IS NULL -- New record
+    OR (
+        t.Attribute1 <> s.Attribute1
+        OR t.Attribute2 <> s.Attribute2 -- Changed record
+    );
+
+    -- Commit the transaction
+    COMMIT TRANSACTION;
+END;
